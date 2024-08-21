@@ -2,7 +2,7 @@ const moment = require("moment");
 
 let students = [];
 let allQuestions = [];
-
+let connectedClients = {};
 class Connection {
   constructor({ io, socket }) {
     this.io = io;
@@ -13,7 +13,9 @@ class Connection {
 
     socket.on("typing-start", (...args) => this.handleTypingStart(...args));
     socket.on("typing-end", (...args) => this.handleTypingEnd(...args));
-    socket.on("new-student-joined", (...args) => console.log(args));
+    socket.on("new-student-joined", (...args) =>
+      this.handleNewStudentJoined(...args)
+    );
     socket.on("new-question-published", (...args) =>
       this.handleQuestionPosted(...args)
     );
@@ -21,24 +23,35 @@ class Connection {
       this.handleAnswerSubmited(...args)
     );
 
-    socket.on("disconnect", () => console.log("user disconnected"));
+    socket.on("kick-out", (socketId) => {
+      console.log({ socketId, connectedClients });
+      if (connectedClients[socketId]) {
+        io.to(socketId).disconnectSockets(); // Disconnect the specific socket
+        delete connectedClients[socketId];
+        students = students.filter((e) => e.userId != socketId);
+        this.io.emit("load-students", students);
+        console.log(`Client ${socketId} has been kicked out.`);
+      }
+    });
+
+    socket.on("disconnect", () => {
+      console.log("user disconnected", socket.userId);
+      students = students.filter((e) => e.userId != socket.userId);
+      this.io.emit("load-students", students);
+    });
   }
 
   handleMessage(data, socketId) {
     this.io.to(socketId).emit("message", data);
   }
 
-  handleTypingStart(socketId) {
-    console.log(socketId, "typing...");
-    this.io.to(socketId).emit("typing-start");
-  }
-
-  handleTypingEnd(socketId) {
-    this.io.to(socketId).emit("typing-end");
+  handleNewStudentJoined(data) {
+    students = students.filter((e) => e.userId !== data.userId);
+    students.push({ ...data, joinedAt: moment().toDate() });
+    this.io.emit("load-students", students);
   }
 
   handleQuestionPosted(data, socketId) {
-    console.log(data, socketId);
     let currentQuestion = {
       title: data.title,
       id: data.id,
@@ -48,13 +61,27 @@ class Connection {
       postedAt: moment().toDate(),
     };
     allQuestions.push(currentQuestion);
+    console.log(allQuestions);
     this.io.emit("question-posted", currentQuestion);
+    this.io.emit(
+      "load-questions",
+      allQuestions.filter((e) => e.postedBy === socketId).reverse()
+    );
   }
 
   handleAnswerSubmited(data, socketId) {
     let questionId = data.questionId;
     let question = allQuestions.find((each) => each.id === questionId);
     question.options[data.answerId].poll += 1;
+
+    let totalVotes = question.options.reduce((acc, e) => e.poll + acc, 0);
+    let updatedPollPercentages = question.options.map((each) => {
+      each.pollPercentage =
+        totalVotes > 0 ? Math.ceil((each.poll / totalVotes) * 100) : 0;
+      return each;
+    });
+
+    question.options = updatedPollPercentages;
 
     this.io.emit("poll-result", {
       questionId,
@@ -77,7 +104,7 @@ function initiateSocket(io) {
 
   io.on("connection", (socket) => {
     console.log("new connection established!!", socket.userId);
-
+    connectedClients[socket.userId] = "connected";
     new Connection({ io, socket });
     const users = [];
     for (let [id, socket] of io.of("/").sockets) {
@@ -86,7 +113,21 @@ function initiateSocket(io) {
         userId: socket.userId,
       });
     }
-    socket.emit("users", users);
+    socket.emit("load-students", students);
+    socket.emit(
+      "load-questions",
+      allQuestions
+        .filter((e) => e.postedBy === socket.userId)
+        .filter((question) => {
+          const postedAtMoment = moment(question.postedAt);
+          const expirationTime = postedAtMoment.add(
+            question.duration,
+            "seconds"
+          );
+          return expirationTime.isAfter(now);
+        })
+        .reverse()
+    );
   });
 }
 
