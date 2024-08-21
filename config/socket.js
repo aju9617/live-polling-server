@@ -47,7 +47,9 @@ class Connection {
 
   handleNewStudentJoined(data) {
     students = students.filter((e) => e.userId !== data.userId);
-    students.push({ ...data, joinedAt: moment().toDate() });
+    if (data.userName) {
+      students.push({ ...data, joinedAt: moment().toDate() });
+    }
     this.io.emit("load-students", students);
   }
 
