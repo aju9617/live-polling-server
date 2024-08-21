@@ -65,9 +65,20 @@ class Connection {
     allQuestions.push(currentQuestion);
     console.log(allQuestions);
     this.io.emit("question-posted", currentQuestion);
+    let now = moment();
     this.io.emit(
       "load-questions",
-      allQuestions.filter((e) => e.postedBy === socketId).reverse()
+      allQuestions
+        .filter((e) => e.postedBy === socketId)
+        .filter((question) => {
+          const postedAtMoment = moment(question.postedAt);
+          const expirationTime = postedAtMoment.add(
+            question.duration,
+            "seconds"
+          );
+          return expirationTime.isBefore(now);
+        })
+        .reverse()
     );
   }
 
@@ -79,7 +90,9 @@ class Connection {
     let totalVotes = question.options.reduce((acc, e) => e.poll + acc, 0);
     let updatedPollPercentages = question.options.map((each) => {
       each.pollPercentage =
-        totalVotes > 0 ? Math.ceil((each.poll / totalVotes) * 100) : 0;
+        totalVotes > 0
+          ? parseFloat((each.poll / totalVotes) * 100).toFixed(2)
+          : 0;
       return each;
     });
 
@@ -116,6 +129,7 @@ function initiateSocket(io) {
       });
     }
     socket.emit("load-students", students);
+    let now = moment();
     socket.emit(
       "load-questions",
       allQuestions
@@ -126,7 +140,7 @@ function initiateSocket(io) {
             question.duration,
             "seconds"
           );
-          return expirationTime.isAfter(moment());
+          return expirationTime.isBefore(now);
         })
         .reverse()
     );
