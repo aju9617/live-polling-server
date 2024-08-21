@@ -126,7 +126,7 @@ function initiateSocket(io) {
             question.duration,
             "seconds"
           );
-          return expirationTime.isAfter(now);
+          return expirationTime.isAfter(moment());
         })
         .reverse()
     );
