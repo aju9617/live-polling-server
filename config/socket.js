@@ -23,8 +23,12 @@ class Connection {
       this.handleAnswerSubmited(...args)
     );
 
+    socket.on("load-students", (...args) => {
+      const [socketId] = args;
+      this.io.to(socketId).emit("load-students", students);
+    });
+
     socket.on("kick-out", (socketId) => {
-      console.log({ socketId, connectedClients });
       if (connectedClients[socketId]) {
         io.to(socketId).disconnectSockets(); // Disconnect the specific socket
         delete connectedClients[socketId];
@@ -41,8 +45,8 @@ class Connection {
     });
   }
 
-  handleMessage(data, socketId) {
-    this.io.to(socketId).emit("message", data);
+  handleMessage(data) {
+    this.socket.broadcast.emit("message", data);
   }
 
   handleNewStudentJoined(data) {
@@ -63,7 +67,7 @@ class Connection {
       postedAt: moment().toDate(),
     };
     allQuestions.push(currentQuestion);
-    console.log(allQuestions);
+
     this.io.emit("question-posted", currentQuestion);
     let now = moment();
     this.io.emit(
