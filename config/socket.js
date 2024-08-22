@@ -69,20 +69,9 @@ class Connection {
     allQuestions.push(currentQuestion);
 
     this.io.emit("question-posted", currentQuestion);
-    let now = moment();
     this.io.emit(
       "load-questions",
-      allQuestions
-        .filter((e) => e.postedBy === socketId)
-        .filter((question) => {
-          const postedAtMoment = moment(question.postedAt);
-          const expirationTime = postedAtMoment.add(
-            question.duration,
-            "seconds"
-          );
-          return expirationTime.isBefore(now);
-        })
-        .reverse()
+      allQuestions.filter((e) => e.postedBy === socketId).reverse()
     );
   }
 
@@ -134,19 +123,10 @@ function initiateSocket(io) {
     }
     socket.emit("load-students", students);
     let now = moment();
+    console.log({ sockedId: socket.userId });
     socket.emit(
       "load-questions",
-      allQuestions
-        .filter((e) => e.postedBy === socket.userId)
-        .filter((question) => {
-          const postedAtMoment = moment(question.postedAt);
-          const expirationTime = postedAtMoment.add(
-            question.duration,
-            "seconds"
-          );
-          return expirationTime.isBefore(now);
-        })
-        .reverse()
+      allQuestions.filter((e) => e.postedBy === socket.userId).reverse()
     );
   });
 }
